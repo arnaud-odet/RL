@@ -9,7 +9,7 @@ import copy
 from tqdm import tqdm
 
 # Helper function for simulations using multi-processing.
-def _parallel_simulation(env) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+def _parallel_simulation(args) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     """
     Helper function for parallel tournament simulation.
     Must be at module level for multiprocessing to work.
@@ -24,9 +24,10 @@ def _parallel_simulation(env) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     Optional[Tuple[np.ndarray, np.ndarray]]:
         Rankings and points arrays for all teams, or None if simulation failed
     """
+    env, policy = args
     try:
         n_teams = len(env.teams)
-        tournament_results = env.simulate_tournament()
+        tournament_results = env.simulate_tournament(policy=policy)
         
         # If simulation failed and returned None
         if tournament_results is None:
@@ -153,15 +154,17 @@ class SwissRoundEnv:
         
         outcome = np.random.random()
         
+        
+        
         if outcome < win_prob:
             if team1_action == 'win' :
                 return (3, 0)  
             if team1_action == 'draw' : 
                 return (1,1)
-            if team1_action == 'loose' :
+            if team1_action == 'lose' :
                 return (0, 3)    
         elif outcome < win_prob + draw_prob:
-            if team1_action == 'loose' :
+            if team1_action == 'lose' :
                 return (0, 3)    
             else :
                 return (1, 1)  
@@ -372,7 +375,7 @@ class SwissRoundEnv:
         
         return pairs
       
-    def step(self, action: Optional[int] = None, verbose:bool=False) -> Tuple[np.ndarray, float, bool]:
+    def step(self, action: Optional[int] = 0, verbose:bool=False) -> Tuple[np.ndarray, float, bool]:
         """
         Execute one step (round) in the environment
         
@@ -464,9 +467,11 @@ class SwissRoundEnv:
         return np.array(state)
     
     # Simulations
-    def simulate_tournament(self, verbose:bool = False) -> List[Tuple[int, int, float]]:
+    def simulate_tournament(self, policy:str='win_all', verbose:bool = False) -> List[Tuple[int, int, float]]:
         """
-        Simulate entire tournament with all teams trying to win
+        Simulate entire tournament with naive policies :
+            - all teams trying to win if policy= 'win_all'
+            - the agent looses purposedly the first game in policy = 'lose_first'
         
         Returns:
             List of (team_id, points, strength) sorted by final standings
@@ -476,12 +481,12 @@ class SwissRoundEnv:
         for rd in range(self.n_rounds):
             if verbose :
                 print(f"--- Simulating round n°{rd +1} ---")
-            self.step(None, verbose = verbose)
+            self.step(2 if rd == 0 and policy == 'lose_first' else 0, verbose = verbose)
             
         rankings = self._get_rankings()
         return [(team.id, team.points, team.opponents_avg_points, team.strength) for team in rankings]
 
-    def simulate_n_tournaments(self, n: int, n_cores: int = None, display_results:bool=False) -> np.ndarray:
+    def simulate_n_tournaments(self, n: int, policy:str='win_all', n_cores: int = None, display_results:bool=False) -> np.ndarray:
         """
         Simulate n tournaments in parallel and collect statistics.
         
@@ -506,7 +511,7 @@ class SwissRoundEnv:
         n_thresholds = len(thresholds)
         
         # Create n copies of the environment for parallel processing
-        env_copies = [copy.deepcopy(self) for _ in range(n)]
+        env_copies = [(copy.deepcopy(self), policy) for _ in range(n)]
         
         # Run simulations in parallel with progress bar
         results = list(_imap_unordered_bar(
