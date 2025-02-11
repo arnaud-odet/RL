@@ -1,0 +1,8 @@
+numpy
+pandas
+torch
+ipython
+ipykernel
+matplotlib
+networkx
+tqdm
