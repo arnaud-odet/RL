@@ -112,11 +112,11 @@ class DQNAgent:
             self.learn(experiences)
             
     def learn(self, experiences):
-        states = torch.FloatTensor([e.state for e in experiences]).to(self.device)
-        actions = torch.LongTensor([e.action for e in experiences]).to(self.device)
-        rewards = torch.FloatTensor([e.reward for e in experiences]).to(self.device)
-        next_states = torch.FloatTensor([e.next_state for e in experiences]).to(self.device)
-        dones = torch.FloatTensor([e.done for e in experiences]).to(self.device)
+        states = torch.FloatTensor(np.array([e.state for e in experiences])).to(self.device)
+        actions = torch.LongTensor(np.array([e.action for e in experiences])).to(self.device)
+        rewards = torch.FloatTensor(np.array([e.reward for e in experiences])).to(self.device)
+        next_states = torch.FloatTensor(np.array([e.next_state for e in experiences])).to(self.device)
+        dones = torch.FloatTensor(np.array([e.done for e in experiences])).to(self.device)
         
         # Shape
         # states: [batch_size, state_size]

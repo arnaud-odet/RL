@@ -481,7 +481,7 @@ class SwissRoundEnv:
         for rd in range(self.n_rounds):
             if verbose :
                 print(f"--- Simulating round n°{rd +1} ---")
-            self.step(2 if rd == 0 and policy == 'lose_first' else 0, verbose = verbose)
+            self.step(2 if (rd == 0 and policy == 'lose_first') else 0, verbose = verbose)
             
         rankings = self._get_rankings()
         return [(team.id, team.points, team.opponents_avg_points, team.strength) for team in rankings]
