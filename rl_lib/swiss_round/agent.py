@@ -186,6 +186,7 @@ class DQNAgent:
                     except ValueError as e:
                         # If pairing fails, abandon this episode and try again
                         #print(f"Tournament failed: {str(e)}")
+                        failed_episodes+=1
                         raise
                     
                     self.step(state, action, reward, next_state, done)
