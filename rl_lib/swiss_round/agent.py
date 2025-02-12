@@ -9,16 +9,21 @@ from rl_lib.swiss_round.environment import SwissRoundEnv
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state', 'done'])
 
 class QNetwork(nn.Module):
-    def __init__(self, state_size, hidden_size=128):
+    def __init__(self, state_size, hidden_dims=[256,128,64], dropout:float=0.1):
         super(QNetwork, self).__init__()
         
-        self.network = nn.Sequential(
-            nn.Linear(state_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, 3)  # 3 actions: win/draw/lose
-        )
+        layers = []
+        
+        for i, hidden_size in enumerate(hidden_dims):
+            input_dim = state_size if i == 0 else hidden_size
+            output_dim = 3 if i == len(hidden_dims) -1 else hidden_dims[i+1]
+            layers.append(nn.Linear(input_dim, output_dim))
+            if not i == len(hidden_dims)-1 :
+                layers.append(nn.ReLU())
+                layers.append(nn.LayerNorm(output_dim))
+                layers.append(nn.Dropout(dropout))
+                
+        self.network = nn.Sequential(*layers)    
         
     def forward(self, x):
         return self.network(x)
@@ -44,7 +49,8 @@ class ReplayBuffer:
 class DQNAgent:
     def __init__(self, 
                  env:SwissRoundEnv, 
-                 hidden_size:int=128, 
+                 hidden_dims:int=128, 
+                 dropout:float=0.1,
                  buffer_size:int=10000, 
                  batch_size:int=64, 
                  gamma:float=1, # No need to discount future rewards as the ultimate goal is the qualification
@@ -77,8 +83,8 @@ class DQNAgent:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Initialize networks
-        self.qnetwork_local = QNetwork(self.state_size, hidden_size).to(self.device)
-        self.qnetwork_target = QNetwork(self.state_size, hidden_size).to(self.device)
+        self.qnetwork_local = QNetwork(self.state_size, hidden_dims, dropout).to(self.device)
+        self.qnetwork_target = QNetwork(self.state_size, hidden_dims, dropout).to(self.device)
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=lr)
         
         # Initialize replay buffer
@@ -94,6 +100,7 @@ class DQNAgent:
         # Initialize episode history for analysis
         self.episode_rewards = []
         self.episode_actions = []
+        self.gambits_count = []
         
     def select_action(self, state):
         if random.random() > self.epsilon:
@@ -160,6 +167,7 @@ class DQNAgent:
         """
         successful_episodes = 0
         failed_episodes = 0
+        gambits_count = []
         
         while successful_episodes < n_episodes:
             try:
@@ -167,10 +175,12 @@ class DQNAgent:
                 state = self.env.reset()
                 episode_reward = 0
                 episode_actions = []
+                gambit_count = 0
                 
                 # Run episode
                 for t in range(self.env.n_rounds):
                     action = self.select_action(state)
+                    gambit_count += int(action != 0)
                     try:
                         next_state, reward, done = self.env.step(action)
                     except ValueError as e:
@@ -188,21 +198,21 @@ class DQNAgent:
                         break
                 
                 # Episode completed successfully
+                #print(f"Episode reward : {episode_reward}")
                 self.episode_rewards.append(episode_reward)
                 self.episode_actions.append(episode_actions)
+                self.gambits_count.append(gambit_count)
                 successful_episodes += 1
                 
                 # Print progress
                 if successful_episodes % 100 == 0:
-                    print(f'Episode {successful_episodes}/{n_episodes}, '
-                        f'Avg Reward: {np.mean(self.episode_rewards[-100:]):.2f}, '
-                        f'Epsilon: {self.epsilon:.3f}, '
-                        f'(failed episodes: {failed_episodes})')
+                    print(f'Episode {successful_episodes}/{n_episodes} | '
+                        f'Avg Reward: {np.mean(self.episode_rewards[-100:]):.2f} | '
+                        f'Avg nb gambits played {np.mean(self.gambits_count[-100:]):.2f} | '
+                        f'Epsilon: {self.epsilon:.3f} | '
+                        f'Failed episodes: {failed_episodes}')
                 
             except ValueError:
-                failed_episodes += 1
-                if failed_episodes % 100 == 0:
-                    print(f"Failed episodes so far: {failed_episodes}")
                 continue
             
             except Exception as e:

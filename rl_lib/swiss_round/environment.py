@@ -427,12 +427,13 @@ class SwissRoundEnv:
         reward = 0
         if done and self.agent is not None:
             rankings = self._get_rankings()
+            reward += self.agent.points
             agent_rank = next(i for i, team in enumerate(rankings) if team.is_agent)
             # Add bonus points for each threshold reached
             for rank_threshold, bonus in zip(self.threshold_ranks, self.bonus_points):
                 if agent_rank < rank_threshold:
                     reward += bonus
-                    
+            #print(f"Agent rank : {agent_rank}, points : {self.agent.points},  bonus : {reward - self.agent.points}")
         return self.get_state(), reward, done
     
     def reset(self) -> np.ndarray:
