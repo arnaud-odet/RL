@@ -7,6 +7,7 @@ import networkx as nx
 from multiprocessing import Pool
 import copy
 from tqdm import tqdm
+from rl_lib.swiss_round.utils import check_probability
 
 # Helper function for simulations using multi-processing.
 def _parallel_simulation(args) -> Optional[Tuple[np.ndarray, np.ndarray]]:
@@ -118,6 +119,8 @@ class SwissRoundEnv:
             ))
         
         self.agent = self.teams[agent_id] if agent_id is not None else None
+        
+        assert check_probability(team_strengths=team_strengths, max_draw_probability=max_draw_probability)
     
     # Tournament functions
     def _simulate_match(

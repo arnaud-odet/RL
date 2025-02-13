@@ -2,9 +2,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+import pandas as pd
+import os
 from collections import namedtuple
 import random
 from rl_lib.swiss_round.environment import SwissRoundEnv
+
+log_folder = './logs'
 
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state', 'done'])
 
@@ -49,7 +53,7 @@ class ReplayBuffer:
 class DQNAgent:
     def __init__(self, 
                  env:SwissRoundEnv, 
-                 hidden_dims:int=128, 
+                 hidden_dims:list=[256,128,64], 
                  dropout:float=0.1,
                  buffer_size:int=10000, 
                  batch_size:int=64, 
@@ -86,6 +90,13 @@ class DQNAgent:
         self.qnetwork_local = QNetwork(self.state_size, hidden_dims, dropout).to(self.device)
         self.qnetwork_target = QNetwork(self.state_size, hidden_dims, dropout).to(self.device)
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=lr)
+        # Recording network parameters
+        self.lr = lr
+        self.n_layers = len(hidden_dims)
+        self.layers = ('_').join([str(i) for i in hidden_dims])
+        self.dropout = dropout
+        self.batch_size=batch_size
+        self.buffer_size = buffer_size
         
         # Initialize replay buffer
         self.memory = ReplayBuffer(buffer_size)
@@ -158,6 +169,71 @@ class DQNAgent:
                                            self.qnetwork_local.parameters()):
             target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
             
+    def log_hyperparameters(self, avg_test_reward, std_rewards, avg_test_gambits_count, std_gambits):
+    
+        # Check if the directory exists, if not, create it
+        if not os.path.exists(log_folder):
+            os.makedirs(log_folder)
+        
+        logs =  pd.DataFrame(
+            [{
+                'n_teams':self.env.n_teams,
+                'n_rounds':self.env.n_rounds,
+                'thresholds':('_').join([str(i) for i in self.env.threshold_ranks]),
+                'bonuses':('_').join([str(i) for i in self.env.bonus_points]),
+                'agent_id' : self.env.agent,
+                'strengths':('_').join([str(t.strength) for t in self.env.teams]),                
+                'n_episodes' : self.n_train_episodes,
+                'n_test_episodes' : self.n_test_episodes,
+                'lr' : self.lr,
+                'n_layers' : self.n_layers,
+                'layers' : self.layers, 
+                'dropout' : self.dropout,
+                'batch_size' : self.batch_size,
+                'buffer_size' : self.buffer_size,
+                'batch_size' : self.batch_size,
+                'gamma' : self.gamma,
+                'epsilon' : self.epsilon,
+                'epsilon_end' : self.epsilon_end,
+                'epsilon_decay' : self.epsilon_decay, 
+                'avg_test_rewards' : avg_test_reward,
+                'std_test_rewards' : std_rewards,
+                'avg_test_gambits' : avg_test_gambits_count,
+                'std_test_gambits' : std_gambits,
+            }]
+        )
+
+        # Check if the file exists, if not, create it as a .csv with pandas
+        filepath = os.path.join(log_folder, 'learning_hyperparameters_logs.csv')
+        if os.path.exists(filepath):
+            log_df = pd.read_csv(filepath, index_col=0)
+            logs = pd.concat([log_df,logs], ignore_index=True)
+        logs.to_csv(filepath)
+        
+        print(f"Hyperparameters logs saved in file {filepath}")
+    
+    def log_history(self):
+    
+        history_folder = os.path.join(log_folder,'histories')
+        index = 1
+        # Check if the directory exists, if not, create it
+        if not os.path.exists(history_folder):
+            os.makedirs(history_folder)
+            
+        for f in os.listdir(history_folder): 
+            l = f.split('_')
+            nb = int(l[-1][:-4])
+            if nb >= index :
+                index = nb+1
+        
+        filename = f'training_history_{index}'
+
+        filepath = os.path.join(history_folder, filename)
+        data = np.array([self.episode_rewards]+[self.gambits_count]).T
+        np.save(filepath, data)
+        
+        print(f"History logs saved in file {filepath}")
+            
     def train(self, n_episodes=1000):
         """
         Train the agent with error handling for failed tournament pairings
@@ -167,8 +243,8 @@ class DQNAgent:
         """
         successful_episodes = 0
         failed_episodes = 0
-        gambits_count = []
-        
+        self.n_train_episodes = n_episodes
+        print('--- Training in progress ---')        
         while successful_episodes < n_episodes:
             try:
                 # Initialize episode
@@ -219,3 +295,92 @@ class DQNAgent:
             except Exception as e:
                 print(f"Unexpected error occurred: {str(e)}")
                 raise
+
+    def evaluate(self, n_episodes=1000):
+        """
+        Evaluate the trained agent without exploration
+        
+        Args:
+            n_episodes (int): Number of test episodes to run
+            
+        """
+        # Store the original epsilon
+        original_epsilon = self.epsilon
+        
+        # Set epsilon to 0 for pure exploitation
+        self.epsilon = 0
+        
+        successful_episodes = 0
+        failed_episodes = 0
+        self.n_test_episodes = n_episodes
+        test_rewards = []
+        test_actions = []
+        test_gambits_count = []
+        print('--- Evaluation in progress ---')
+        while successful_episodes < n_episodes:
+            try:
+                # Initialize episode
+                state = self.env.reset()
+                episode_reward = 0
+                episode_actions = []
+                gambit_count = 0
+                
+                # Run episode
+                for t in range(self.env.n_rounds):
+                    action = self.select_action(state)
+                    gambit_count += int(action != 0)
+                    try:
+                        next_state, reward, done = self.env.step(action)
+                    except ValueError as e:
+                        failed_episodes+=1
+                        raise
+                    
+                    
+                    state = next_state
+                    episode_reward += reward
+                    episode_actions.append(action)
+                    
+                    if done:
+                        break
+                
+                # Episode completed successfully
+                #print(f"Episode reward : {episode_reward}")
+                test_rewards.append(episode_reward)
+                test_actions.append(episode_actions)
+                test_gambits_count.append(gambit_count)
+                successful_episodes += 1
+                
+                # Print progress
+                if successful_episodes % 100 == 0:
+                    print(f'Episode {successful_episodes}/{n_episodes} | '
+                        f'Avg Reward: {np.mean(test_rewards[-100:]):.2f} | '
+                        f'Avg nb gambits played {np.mean(test_gambits_count[-100:]):.2f} | '
+                        f'Failed episodes: {failed_episodes}')
+                
+            except ValueError:
+                continue
+            
+            except Exception as e:
+                print(f"Unexpected error occurred: {str(e)}")
+                raise
+        
+        # Restore the original epsilon
+        self.epsilon = original_epsilon
+        
+        # Calculate statistics
+        mean_reward = np.mean(test_rewards)
+        std_reward = np.std(test_rewards)
+        mean_gambits = np.mean(test_gambits_count)
+        std_gambits = np.std(test_gambits_count)
+        
+        print("\nEvaluation Results:")
+        print(f"Mean Reward: {mean_reward:.2f} ± {std_reward:.2f}")
+        print(f"Mean Gambits count: {mean_gambits:.2f} ± {std_gambits:.2f}")        
+        print(f"Best Episode Reward: {max(test_rewards):.2f}")
+        print(f"Worst Episode Reward: {min(test_rewards):.2f}")
+  
+        self.log_hyperparameters(avg_test_reward=mean_reward, 
+                                 std_rewards= std_reward,
+                                 avg_test_gambits_count=mean_gambits,
+                                 std_gambits=std_gambits)
+        self.log_history()
