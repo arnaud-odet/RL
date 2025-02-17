@@ -1,4 +1,5 @@
 import argparse
+import numpy as np
 from rl_lib.swiss_round.agent import DQNAgent
 from rl_lib.swiss_round.environment import SwissRoundEnv
 
@@ -13,7 +14,7 @@ if __name__ == '__main__':
     parser.add_argument('--threshold_rewards', nargs='+', type=int, default= [30,20])
     parser.add_argument('--max_draw_probability', type=float, default=0.3)
     parser.add_argument('--max_strength', type=float, default=2)
-    parser.add_argument('--strength_decay_factor', type=float, default=0.6)
+    parser.add_argument('--strength_decay_factor', type=float, default=0.9)
     parser.add_argument('--strength_decay_method', type=str, choices = ['linear','exponential'], default='linear')
     
     # Agent arguments
@@ -30,6 +31,10 @@ if __name__ == '__main__':
     parser.add_argument('--train_episodes', type=int, default=20000)
     parser.add_argument('--test_episodes', type=int, default=2000)
     
+    # Log arguments
+    parser.add_argument('--log_dir', type=str, default="/home/admin/code/arnaud-odet/2_projets/reinforcement_learning/logs")
+    
+    
 
     args = parser.parse_args()
 
@@ -38,7 +43,7 @@ if __name__ == '__main__':
             print(k, value)
     
     if args.strength_decay_method == 'linear':
-        team_strengths = [args.max_strength - args.strength_decay_factor * i for i in range(args.n_teams)]
+        team_strengths = np.linspace(args.max_strength, 0, args.n_teams)
     else :
         team_strengths = [args.max_strength * args.strength_decay_factor ** i for i in range(args.n_teams)]
     
@@ -61,6 +66,7 @@ if __name__ == '__main__':
                  gamma = args.gamma,
                  epsilon_start=args.epsilon_start,
                  epsilon_end=args.epsilon_end,
-                 epsilon_decay=args.epsilon_decay)
+                 epsilon_decay=args.epsilon_decay,
+                 log_dir = args.log_dir)
     agent.train(n_episodes=args.train_episodes)
     agent.evaluate(n_episodes=args.test_episodes)

@@ -37,13 +37,14 @@ def _parallel_simulation(args) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         # Initialize arrays for this simulation
         rankings = np.zeros(n_teams)
         points = np.zeros(n_teams)
+        rewards = np.zeros(n_teams)
         
         # Process tournament results
-        for rank, (team_id, team_points, _, _) in enumerate(tournament_results):
+        for rank, (team_id, team_points, team_reward, _, _) in enumerate(tournament_results):
             rankings[team_id] = rank + 1  # Convert to 1-based ranking
             points[team_id] = team_points
-            
-        return rankings, points
+            rewards[team_id] = team_reward
+        return rankings, points, rewards
         
     except Exception as e:
         #print(f"Warning: Simulation failed with error: {str(e)}")
@@ -488,7 +489,8 @@ class SwissRoundEnv:
             self.step(2 if (rd == 0 and policy == 'lose_first') else 0, verbose = verbose)
             
         rankings = self._get_rankings()
-        return [(team.id, team.points, team.opponents_avg_points, team.strength) for team in rankings]
+        team_rewards = [sum([bonus if rank <threshold else 0 for bonus, threshold in zip(self.bonus_points, self.threshold_ranks)]) + team.points for rank,team in enumerate(rankings)]
+        return [(team.id, team.points, team_rewards[i],team.opponents_avg_points, team.strength) for i,team in enumerate(rankings)]
 
     def simulate_n_tournaments(self, n: int, policy:str='win_all', n_cores: int = None, display_results:bool=False) -> np.ndarray:
         """
@@ -539,13 +541,14 @@ class SwissRoundEnv:
         # Unpack results
         rankings_history = np.zeros((n_teams, n_valid))
         points_history = np.zeros((n_teams, n_valid))
+        reward_history = np.zeros((n_teams, n_valid))
         
-        for i, (rankings, points) in enumerate(valid_results):
+        for i, (rankings, points, reward) in enumerate(valid_results):
             rankings_history[:, i] = rankings
             points_history[:, i] = points
-        
+            reward_history[:, i] = reward
         # Calculate statistics
-        results = np.zeros((n_teams, 3 + n_thresholds))
+        results = np.zeros((n_teams, 5 + n_thresholds))
         
         for team_id in range(n_teams):
             # Column 0: Team strength
@@ -557,26 +560,33 @@ class SwissRoundEnv:
             # Column 2: Average ranking
             results[team_id, 2] = np.mean(rankings_history[team_id])
             
-            # Columns 3+: Share of tournaments where team ranked better than each threshold
+            # Column 3: Average reward
+            results[team_id, 3] = np.mean(reward_history[team_id])
+            
+            # Column 4: Average reward
+            results[team_id, 4] = np.std(reward_history[team_id])
+            
+            # Columns 5+: Share of tournaments where team ranked better than each threshold
             for t_idx, threshold in enumerate(thresholds):
-                results[team_id, 3 + t_idx] = np.mean(rankings_history[team_id] <= threshold)
+                results[team_id, 5 + t_idx] = np.mean(rankings_history[team_id] <= threshold)
         
         if display_results:
             print(f"\nSimulation Results (from {n_valid} tournaments):")
-            print("Team | Strength | Avg Points | Avg Rank |", end=" ")
+            print("Team | Strength | Avg Points | Avg Rank | Avg Reward | Std Reward |", end=" ")
             for t in thresholds:
                 print(f"Top-{t} % |", end=" ")
             print()
-            print("-" * (30 + 12 * n_thresholds))
+            print("-" * (64 + 12 * n_thresholds))
             
             for team_id in range(n_teams):
                 print(f"{team_id:4d} | {results[team_id, 0]:8.2f} | "
-                      f"{results[team_id, 1]:10.2f} | {results[team_id, 2]:8.2f} |", end=" ")
+                      f"{results[team_id, 1]:10.2f} | {results[team_id, 2]:8.2f} | "
+                      f"{results[team_id, 3]:10.2f} | {results[team_id, 4]:10.2f} |", end=" ")
                 for t_idx in range(n_thresholds):
-                    print(f"{results[team_id, 3 + t_idx]:7.2%} |", end=" ")
+                    print(f"{results[team_id, 5 + t_idx]:7.2%} |", end=" ")
                 print()
         
-        result_df = pd.DataFrame(results, columns = ["Strength", "Avg_Points", "Avg_Rank"] + [f"Top-{t} %" for t in thresholds])
+        result_df = pd.DataFrame(results, columns = ["Strength", "Avg_Points", "Avg_Rank", "Avg_Reward", "Std_Reward"] + [f"Top-{t} %" for t in thresholds])
         result_df = result_df.reset_index().rename(columns = {'index':'Team'})
         
         return result_df

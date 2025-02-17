@@ -8,7 +8,6 @@ from collections import namedtuple
 import random
 from rl_lib.swiss_round.environment import SwissRoundEnv
 
-log_folder = './logs'
 
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state', 'done'])
 
@@ -61,7 +60,8 @@ class DQNAgent:
                  lr:float=1e-3, 
                  epsilon_start:float=1.0,
                  epsilon_end:float=0.01, 
-                 epsilon_decay:float=0.995):
+                 epsilon_decay:float=0.995,
+                 log_dir:str = "/home/admin/code/arnaud-odet/2_projets/reinforcement_learning/logs"):
         """
         Args:
             env: SwissRoundEnv instance
@@ -112,6 +112,8 @@ class DQNAgent:
         self.episode_rewards = []
         self.episode_actions = []
         self.gambits_count = []
+        
+        self.log_folder= log_dir
         
     def select_action(self, state):
         if random.random() > self.epsilon:
@@ -172,8 +174,8 @@ class DQNAgent:
     def log_hyperparameters(self, avg_test_reward, std_rewards, avg_test_gambits_count, std_gambits):
     
         # Check if the directory exists, if not, create it
-        if not os.path.exists(log_folder):
-            os.makedirs(log_folder)
+        if not os.path.exists(self.log_folder):
+            os.makedirs(self.log_folder)
         
         logs =  pd.DataFrame(
             [{
@@ -181,7 +183,7 @@ class DQNAgent:
                 'n_rounds':self.env.n_rounds,
                 'thresholds':('_').join([str(i) for i in self.env.threshold_ranks]),
                 'bonuses':('_').join([str(i) for i in self.env.bonus_points]),
-                'agent_id' : self.env.agent,
+                'agent_id' : self.env.agent.id,
                 'strengths':('_').join([str(t.strength) for t in self.env.teams]),                
                 'n_episodes' : self.n_train_episodes,
                 'n_test_episodes' : self.n_test_episodes,
@@ -204,7 +206,7 @@ class DQNAgent:
         )
 
         # Check if the file exists, if not, create it as a .csv with pandas
-        filepath = os.path.join(log_folder, 'learning_hyperparameters_logs.csv')
+        filepath = os.path.join(self.log_folder, 'learning_hyperparameters_logs.csv')
         if os.path.exists(filepath):
             log_df = pd.read_csv(filepath, index_col=0)
             logs = pd.concat([log_df,logs], ignore_index=True)
@@ -214,7 +216,7 @@ class DQNAgent:
     
     def log_history(self):
     
-        history_folder = os.path.join(log_folder,'histories')
+        history_folder = os.path.join(self.log_folder,'histories')
         index = 1
         # Check if the directory exists, if not, create it
         if not os.path.exists(history_folder):
@@ -244,8 +246,11 @@ class DQNAgent:
         successful_episodes = 0
         failed_episodes = 0
         self.n_train_episodes = n_episodes
+        verbose_step = 100
         print('--- Training in progress ---')        
         while successful_episodes < n_episodes:
+            if self.epsilon - self.epsilon_end < 0.001 :
+                verbose_step = n_episodes // 10
             try:
                 # Initialize episode
                 state = self.env.reset()
@@ -282,7 +287,7 @@ class DQNAgent:
                 successful_episodes += 1
                 
                 # Print progress
-                if successful_episodes % 100 == 0:
+                if successful_episodes % verbose_step == 0 or successful_episodes == n_episodes:
                     print(f'Episode {successful_episodes}/{n_episodes} | '
                         f'Avg Reward: {np.mean(self.episode_rewards[-100:]):.2f} | '
                         f'Avg nb gambits played {np.mean(self.gambits_count[-100:]):.2f} | '
@@ -316,6 +321,7 @@ class DQNAgent:
         test_rewards = []
         test_actions = []
         test_gambits_count = []
+        verbose_step = n_episodes // 5
         print('--- Evaluation in progress ---')
         while successful_episodes < n_episodes:
             try:
@@ -351,7 +357,7 @@ class DQNAgent:
                 successful_episodes += 1
                 
                 # Print progress
-                if successful_episodes % 100 == 0:
+                if successful_episodes % verbose_step == 0 or successful_episodes == n_episodes:
                     print(f'Episode {successful_episodes}/{n_episodes} | '
                         f'Avg Reward: {np.mean(test_rewards[-100:]):.2f} | '
                         f'Avg nb gambits played {np.mean(test_gambits_count[-100:]):.2f} | '
