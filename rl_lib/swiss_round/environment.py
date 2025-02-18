@@ -79,6 +79,7 @@ class SwissRoundEnv:
         self,
         n_teams: int,
         n_rounds: int,
+        name: str, 
         team_strengths: List[float],
         threshold_ranks: List[int],
         bonus_points: List[int],
@@ -104,6 +105,7 @@ class SwissRoundEnv:
         
         self.n_teams = n_teams
         self.n_rounds = n_rounds
+        self.name = name
         self.threshold_ranks = sorted(threshold_ranks)  # Sort in ascending order
         self.bonus_points = [x for _, x in sorted(zip(threshold_ranks, bonus_points))]
         self.max_draw_probability = max_draw_probability

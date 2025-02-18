@@ -61,7 +61,8 @@ class DQNAgent:
                  epsilon_start:float=1.0,
                  epsilon_end:float=0.01, 
                  epsilon_decay:float=0.995,
-                 log_dir:str = "/home/admin/code/arnaud-odet/2_projets/reinforcement_learning/logs"):
+                 log_dir:str = "/home/admin/code/arnaud-odet/2_projets/reinforcement_learning/logs",
+                 history_prefix:str = "loc"):
         """
         Args:
             env: SwissRoundEnv instance
@@ -114,6 +115,17 @@ class DQNAgent:
         self.gambits_count = []
         
         self.log_folder= log_dir
+        self.id = history_prefix + '_' + str(self.find_id())
+        
+    def find_id(self):
+        filepath = os.path.join(self.log_folder, 'exp_logs.csv')
+        if os.path.exists(filepath):
+            ldf = pd.read_csv(filepath, index_col=0)
+            pass_exp_ids = [int(s.split('_')[-1]) for s in ldf['exp_id']]
+            exp_id = max(pass_exp_ids)
+            return exp_id +1
+        else :
+            return 1
         
     def select_action(self, state):
         if random.random() > self.epsilon:
@@ -179,6 +191,8 @@ class DQNAgent:
         
         logs =  pd.DataFrame(
             [{
+                'exp_id':self.id,
+                'env_name':self.env.name,
                 'n_teams':self.env.n_teams,
                 'n_rounds':self.env.n_rounds,
                 'thresholds':('_').join([str(i) for i in self.env.threshold_ranks]),
@@ -206,7 +220,7 @@ class DQNAgent:
         )
 
         # Check if the file exists, if not, create it as a .csv with pandas
-        filepath = os.path.join(self.log_folder, 'learning_hyperparameters_logs.csv')
+        filepath = os.path.join(self.log_folder, 'exp_logs.csv')
         if os.path.exists(filepath):
             log_df = pd.read_csv(filepath, index_col=0)
             logs = pd.concat([log_df,logs], ignore_index=True)
@@ -221,14 +235,8 @@ class DQNAgent:
         # Check if the directory exists, if not, create it
         if not os.path.exists(history_folder):
             os.makedirs(history_folder)
-            
-        for f in os.listdir(history_folder): 
-            l = f.split('_')
-            nb = int(l[-1][:-4])
-            if nb >= index :
-                index = nb+1
         
-        filename = f'training_history_{index}'
+        filename = f'training_history_{self.id}'
 
         filepath = os.path.join(history_folder, filename)
         data = np.array([self.episode_rewards]+[self.gambits_count]).T
@@ -289,8 +297,8 @@ class DQNAgent:
                 # Print progress
                 if successful_episodes % verbose_step == 0 or successful_episodes == n_episodes:
                     print(f'Episode {successful_episodes}/{n_episodes} | '
-                        f'Avg Reward: {np.mean(self.episode_rewards[-100:]):.2f} | '
-                        f'Avg nb gambits played {np.mean(self.gambits_count[-100:]):.2f} | '
+                        f'Avg Reward: {np.mean(self.episode_rewards[-verbose_step:]):.2f} ± {np.std(self.episode_rewards[-verbose_step:]):.2f} |  '
+                        f'Avg nb gambits played {np.mean(self.gambits_count[-verbose_step:]):.2f} ± {np.std(self.gambits_count[-verbose_step:]):.2f} | '
                         f'Epsilon: {self.epsilon:.3f} | '
                         f'Failed episodes: {failed_episodes}')
                 
@@ -359,8 +367,8 @@ class DQNAgent:
                 # Print progress
                 if successful_episodes % verbose_step == 0 or successful_episodes == n_episodes:
                     print(f'Episode {successful_episodes}/{n_episodes} | '
-                        f'Avg Reward: {np.mean(test_rewards[-100:]):.2f} | '
-                        f'Avg nb gambits played {np.mean(test_gambits_count[-100:]):.2f} | '
+                        f'Avg Reward: {np.mean(test_rewards[-verbose_step:]):.2f} ± {np.std(test_rewards[-verbose_step:]):.2f} | '
+                        f'Avg nb gambits played {np.mean(test_gambits_count[-verbose_step:]):.2f} ± {np.std(test_gambits_count[-verbose_step:]):.2f} | '
                         f'Failed episodes: {failed_episodes}')
                 
             except ValueError:

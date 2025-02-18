@@ -12,8 +12,9 @@ if __name__ == '__main__':
     parser.add_argument('--n_rounds', type=int, default=6)
     parser.add_argument('--threshold_ranks', nargs='+', type=int, default= [4,12])
     parser.add_argument('--threshold_rewards', nargs='+', type=int, default= [30,20])
-    parser.add_argument('--max_draw_probability', type=float, default=0.3)
-    parser.add_argument('--max_strength', type=float, default=2)
+    parser.add_argument('--max_draw_probability', type=float, default=0.5)
+    parser.add_argument('--env_name', type=str, default="misc")    
+    parser.add_argument('--max_strength', type=float, default=4)
     parser.add_argument('--strength_decay_factor', type=float, default=0.9)
     parser.add_argument('--strength_decay_method', type=str, choices = ['linear','exponential'], default='linear')
     
@@ -33,6 +34,7 @@ if __name__ == '__main__':
     
     # Log arguments
     parser.add_argument('--log_dir', type=str, default="/home/admin/code/arnaud-odet/2_projets/reinforcement_learning/logs")
+    parser.add_argument('--history_log_prefix', type=str, default="loc")
     
     
 
@@ -50,6 +52,7 @@ if __name__ == '__main__':
     env = SwissRoundEnv(
         n_teams = args.n_teams,
         n_rounds = args.n_rounds,
+        name = args.env_name,
         team_strengths = team_strengths,
         threshold_ranks = args.threshold_ranks,
         bonus_points = args.threshold_rewards,
@@ -67,6 +70,7 @@ if __name__ == '__main__':
                  epsilon_start=args.epsilon_start,
                  epsilon_end=args.epsilon_end,
                  epsilon_decay=args.epsilon_decay,
-                 log_dir = args.log_dir)
+                 log_dir = args.log_dir,
+                 history_prefix = args.history_log_prefix)
     agent.train(n_episodes=args.train_episodes)
     agent.evaluate(n_episodes=args.test_episodes)
