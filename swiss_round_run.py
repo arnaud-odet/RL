@@ -21,15 +21,19 @@ if __name__ == '__main__':
     # Agent arguments
     parser.add_argument('--agent_id', type=int, default=0)
     parser.add_argument('--hidden_sizes', nargs='+', type=int, default= [256,128,64])
+    parser.add_argument('--activation', type=str, default="relu")    
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--buffer_size', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--gamma', type=float, default=1)
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--max_grad_norm', type=float, default=1e6)    
+    parser.add_argument('--use_lr_scheduler', type=bool, default=True)
     parser.add_argument('--epsilon_start', type=float, default=1)
     parser.add_argument('--epsilon_end', type=float, default=0.02)
     parser.add_argument('--epsilon_decay', type=float, default=0.9995)
     parser.add_argument('--train_episodes', type=int, default=20000)
+    parser.add_argument('--train_epochs', type=int, default=1)
     parser.add_argument('--test_episodes', type=int, default=2000)
     
     # Log arguments
@@ -62,15 +66,21 @@ if __name__ == '__main__':
     
     agent = DQNAgent(env,
                  hidden_dims=args.hidden_sizes,
+                 activation = args.activation,
                  dropout= args.dropout,
                  batch_size= args.batch_size,
                  lr = args.lr,
+                 use_lr_scheduler = args.use_lr_scheduler,
                  buffer_size=args.buffer_size,
                  gamma = args.gamma,
                  epsilon_start=args.epsilon_start,
                  epsilon_end=args.epsilon_end,
                  epsilon_decay=args.epsilon_decay,
+                 n_train_episodes=args.train_episodes,
+                 n_test_episodes=args.test_episodes,                 
+                 train_epochs = args.train_epochs,
+                 max_grad_norm = args.max_grad_norm,
                  log_dir = args.log_dir,
                  history_prefix = args.history_log_prefix)
-    agent.train(n_episodes=args.train_episodes)
-    agent.evaluate(n_episodes=args.test_episodes)
+    agent.train()
+    agent.evaluate()

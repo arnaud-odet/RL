@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import LambdaLR
 import numpy as np
 import pandas as pd
 import os
@@ -12,7 +13,11 @@ from rl_lib.swiss_round.environment import SwissRoundEnv
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state', 'done'])
 
 class QNetwork(nn.Module):
-    def __init__(self, state_size, hidden_dims=[256,128,64], dropout:float=0.1):
+    def __init__(self, 
+                 state_size,
+                 activation:str='relu', 
+                 hidden_dims=[256,64], 
+                 dropout:float=0.1):
         super(QNetwork, self).__init__()
         
         layers = []
@@ -22,7 +27,12 @@ class QNetwork(nn.Module):
             output_dim = 3 if i == len(hidden_dims) -1 else hidden_dims[i+1]
             layers.append(nn.Linear(input_dim, output_dim))
             if not i == len(hidden_dims)-1 :
-                layers.append(nn.ReLU())
+                if activation =='relu':
+                    layers.append(nn.ReLU())
+                elif activation == 'tanh':
+                    layers.append(nn.Tanh())
+                else :
+                    layers.append(nn.ReLU())
                 layers.append(nn.LayerNorm(output_dim))
                 layers.append(nn.Dropout(dropout))
                 
@@ -53,14 +63,20 @@ class DQNAgent:
     def __init__(self, 
                  env:SwissRoundEnv, 
                  hidden_dims:list=[256,128,64], 
+                 activation:str = 'relu',
                  dropout:float=0.1,
                  buffer_size:int=10000, 
                  batch_size:int=64, 
                  gamma:float=1, # No need to discount future rewards as the ultimate goal is the qualification
                  lr:float=1e-3, 
+                 use_lr_scheduler:bool=True,
                  epsilon_start:float=1.0,
                  epsilon_end:float=0.01, 
                  epsilon_decay:float=0.995,
+                 n_train_episodes:int = 1000,
+                 n_test_episodes:int = 100,
+                 train_epochs:int = 1,
+                 max_grad_norm:float = 1e6,
                  log_dir:str = "/home/admin/code/arnaud-odet/2_projets/reinforcement_learning/logs",
                  history_prefix:str = "loc"):
         """
@@ -86,19 +102,19 @@ class DQNAgent:
         self.state_size = len(state)
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # Initialize networks
-        self.qnetwork_local = QNetwork(self.state_size, hidden_dims, dropout).to(self.device)
-        self.qnetwork_target = QNetwork(self.state_size, hidden_dims, dropout).to(self.device)
-        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=lr)
+
         # Recording network parameters
         self.lr = lr
         self.n_layers = len(hidden_dims)
         self.layers = ('_').join([str(i) for i in hidden_dims])
+        self.activation = activation
         self.dropout = dropout
         self.batch_size=batch_size
         self.buffer_size = buffer_size
-        
+        self.train_epochs = train_epochs
+        self.max_grad_norm = max_grad_norm
+        self.n_train_episodes = n_train_episodes
+        self.n_test_episodes = n_test_episodes
         # Initialize replay buffer
         self.memory = ReplayBuffer(buffer_size)
         self.batch_size = batch_size
@@ -116,6 +132,22 @@ class DQNAgent:
         
         self.log_folder= log_dir
         self.id = history_prefix + '_' + str(self.find_id())
+
+        # Initialize networks
+        self.qnetwork_local = QNetwork(self.state_size, activation, hidden_dims, dropout).to(self.device)
+        self.qnetwork_target = QNetwork(self.state_size, activation, hidden_dims, dropout).to(self.device)
+        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=lr)
+        # Set up learning rate scheduler (linear decay from 1.0 to 0.0 over total_training_steps)
+        self.use_lr_scheduler = use_lr_scheduler
+        if self.use_lr_scheduler:
+            self.scheduler = LambdaLR(
+                self.optimizer,
+                # Lambda function: decays linearly with number of steps.
+                lambda step: max(0.0, 1 - step/self.n_train_episodes)
+            )
+        else:
+            self.scheduler = None
+        self.learning_steps = 0
         
     def find_id(self):
         filepath = os.path.join(self.log_folder, 'exp_logs.csv')
@@ -140,8 +172,9 @@ class DQNAgent:
         self.memory.push(state, action, reward, next_state, done)
         
         if len(self.memory) > self.batch_size:
-            experiences = self.memory.sample(self.batch_size)
-            self.learn(experiences)
+            for _ in range(self.train_epochs):
+                experiences = self.memory.sample(self.batch_size)
+                self.learn(experiences)
             
     def learn(self, experiences):
         states = torch.FloatTensor(np.array([e.state for e in experiences])).to(self.device)
@@ -173,7 +206,12 @@ class DQNAgent:
         
         self.optimizer.zero_grad()
         loss.backward()
+        # Clip gradients to avoid exploding gradients
+        torch.nn.utils.clip_grad_norm_(self.qnetwork_local.parameters(), self.max_grad_norm)
         self.optimizer.step()
+        self.learning_steps += 1
+        if self.scheduler is not None:
+            self.scheduler.step()
         
         self.soft_update()
         self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
@@ -200,11 +238,15 @@ class DQNAgent:
                 'agent_id' : self.env.agent.id,
                 'strengths':('_').join([str(t.strength) for t in self.env.teams]),                
                 'n_episodes' : self.n_train_episodes,
+                'train_epochs' : self.train_epochs,
                 'n_test_episodes' : self.n_test_episodes,
                 'lr' : self.lr,
+                'use_lr_scheduler':self.use_lr_scheduler,
                 'n_layers' : self.n_layers,
                 'layers' : self.layers, 
+                'activation':self.activation,
                 'dropout' : self.dropout,
+                'gradient_clipping':self.max_grad_norm,
                 'batch_size' : self.batch_size,
                 'buffer_size' : self.buffer_size,
                 'batch_size' : self.batch_size,
@@ -244,21 +286,19 @@ class DQNAgent:
         
         print(f"History logs saved in file {filepath}")
             
-    def train(self, n_episodes=1000):
+    def train(self):
         """
         Train the agent with error handling for failed tournament pairings
-        
-        Args:
-            n_episodes (int): Number of episodes to train
+
         """
         successful_episodes = 0
         failed_episodes = 0
-        self.n_train_episodes = n_episodes
+
         verbose_step = 100
         print('--- Training in progress ---')        
-        while successful_episodes < n_episodes:
+        while successful_episodes < self.n_train_episodes:
             if self.epsilon - self.epsilon_end < 0.001 :
-                verbose_step = n_episodes // 10
+                verbose_step = self.n_train_episodes // 10
             try:
                 # Initialize episode
                 state = self.env.reset()
@@ -295,8 +335,8 @@ class DQNAgent:
                 successful_episodes += 1
                 
                 # Print progress
-                if successful_episodes % verbose_step == 0 or successful_episodes == n_episodes:
-                    print(f'Episode {successful_episodes}/{n_episodes} | '
+                if successful_episodes % verbose_step == 0 or successful_episodes == self.n_train_episodes:
+                    print(f'Episode {successful_episodes:8}/{self.n_train_episodes} | '
                         f'Avg Reward: {np.mean(self.episode_rewards[-verbose_step:]):.2f} ± {np.std(self.episode_rewards[-verbose_step:]):.2f} |  '
                         f'Avg nb gambits played {np.mean(self.gambits_count[-verbose_step:]):.2f} ± {np.std(self.gambits_count[-verbose_step:]):.2f} | '
                         f'Epsilon: {self.epsilon:.3f} | '
@@ -309,12 +349,9 @@ class DQNAgent:
                 print(f"Unexpected error occurred: {str(e)}")
                 raise
 
-    def evaluate(self, n_episodes=1000):
+    def evaluate(self):
         """
         Evaluate the trained agent without exploration
-        
-        Args:
-            n_episodes (int): Number of test episodes to run
             
         """
         # Store the original epsilon
@@ -325,13 +362,12 @@ class DQNAgent:
         
         successful_episodes = 0
         failed_episodes = 0
-        self.n_test_episodes = n_episodes
         test_rewards = []
         test_actions = []
         test_gambits_count = []
-        verbose_step = n_episodes // 5
+        verbose_step = self.n_test_episodes // 5
         print('--- Evaluation in progress ---')
-        while successful_episodes < n_episodes:
+        while successful_episodes < self.n_test_episodes:
             try:
                 # Initialize episode
                 state = self.env.reset()
@@ -365,8 +401,8 @@ class DQNAgent:
                 successful_episodes += 1
                 
                 # Print progress
-                if successful_episodes % verbose_step == 0 or successful_episodes == n_episodes:
-                    print(f'Episode {successful_episodes}/{n_episodes} | '
+                if successful_episodes % verbose_step == 0 or successful_episodes == self.n_test_episodes:
+                    print(f'Episode {successful_episodes:8}/{self.n_test_episodes} | '
                         f'Avg Reward: {np.mean(test_rewards[-verbose_step:]):.2f} ± {np.std(test_rewards[-verbose_step:]):.2f} | '
                         f'Avg nb gambits played {np.mean(test_gambits_count[-verbose_step:]):.2f} ± {np.std(test_gambits_count[-verbose_step:]):.2f} | '
                         f'Failed episodes: {failed_episodes}')
