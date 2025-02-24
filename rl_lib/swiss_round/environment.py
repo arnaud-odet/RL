@@ -527,7 +527,7 @@ class SwissRoundEnv:
             env_copies, 
             n_processes=n_cores, 
             total=n,
-            desc="Simulating tournaments"
+            desc=f"Simulating tournaments with {policy} policy"
         ))
         
         # Filter out failed simulations (None results)

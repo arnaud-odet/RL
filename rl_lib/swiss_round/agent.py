@@ -147,7 +147,6 @@ class DQNAgent:
             )
         else:
             self.scheduler = None
-        self.learning_steps = 0
         
     def find_id(self):
         filepath = os.path.join(self.log_folder, 'exp_logs.csv')
@@ -172,47 +171,46 @@ class DQNAgent:
         self.memory.push(state, action, reward, next_state, done)
         
         if len(self.memory) > self.batch_size:
-            for _ in range(self.train_epochs):
-                experiences = self.memory.sample(self.batch_size)
-                self.learn(experiences)
+            self.learn()
             
-    def learn(self, experiences):
-        states = torch.FloatTensor(np.array([e.state for e in experiences])).to(self.device)
-        actions = torch.LongTensor(np.array([e.action for e in experiences])).to(self.device)
-        rewards = torch.FloatTensor(np.array([e.reward for e in experiences])).to(self.device)
-        next_states = torch.FloatTensor(np.array([e.next_state for e in experiences])).to(self.device)
-        dones = torch.FloatTensor(np.array([e.done for e in experiences])).to(self.device)
+    def learn(self):
+        for _ in range(self.train_epochs):
+            experiences = self.memory.sample(self.batch_size)        
+            states = torch.FloatTensor(np.array([e.state for e in experiences])).to(self.device)
+            actions = torch.LongTensor(np.array([e.action for e in experiences])).to(self.device)
+            rewards = torch.FloatTensor(np.array([e.reward for e in experiences])).to(self.device)
+            next_states = torch.FloatTensor(np.array([e.next_state for e in experiences])).to(self.device)
+            dones = torch.FloatTensor(np.array([e.done for e in experiences])).to(self.device)
+            
+            # Shape
+            # states: [batch_size, state_size]
+            # actions: [batch_size]
+            # rewards: [batch_size]
+            # next_states: [batch_size, state_size]
+            # dones: [batch_size]
+            
+            # Get max predicted Q values (for next states) from target model
+            Q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0]  # shape: [batch_size]
+            
+            # Compute Q targets for current states
+            Q_targets = rewards + (self.gamma * Q_targets_next * (1 - dones))  # shape: [batch_size]
+            
+            # Get expected Q values from local model
+            Q_expected = self.qnetwork_local(states).gather(1, actions.unsqueeze(1))  # shape: [batch_size, 1]
+            
+            # Make sure Q_targets has the same shape as Q_expected
+            Q_targets = Q_targets.unsqueeze(1)  # shape: [batch_size, 1]     
+            
+            loss = nn.MSELoss()(Q_expected, Q_targets)
+            
+            self.optimizer.zero_grad()
+            loss.backward()
+            # Clip gradients to avoid exploding gradients
+            torch.nn.utils.clip_grad_norm_(self.qnetwork_local.parameters(), self.max_grad_norm)
+            self.optimizer.step()
         
-        # Shape
-        # states: [batch_size, state_size]
-        # actions: [batch_size]
-        # rewards: [batch_size]
-        # next_states: [batch_size, state_size]
-        # dones: [batch_size]
-        
-        # Get max predicted Q values (for next states) from target model
-        Q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0]  # shape: [batch_size]
-        
-        # Compute Q targets for current states
-        Q_targets = rewards + (self.gamma * Q_targets_next * (1 - dones))  # shape: [batch_size]
-        
-        # Get expected Q values from local model
-        Q_expected = self.qnetwork_local(states).gather(1, actions.unsqueeze(1))  # shape: [batch_size, 1]
-        
-        # Make sure Q_targets has the same shape as Q_expected
-        Q_targets = Q_targets.unsqueeze(1)  # shape: [batch_size, 1]     
-        
-        loss = nn.MSELoss()(Q_expected, Q_targets)
-        
-        self.optimizer.zero_grad()
-        loss.backward()
-        # Clip gradients to avoid exploding gradients
-        torch.nn.utils.clip_grad_norm_(self.qnetwork_local.parameters(), self.max_grad_norm)
-        self.optimizer.step()
-        self.learning_steps += 1
         if self.scheduler is not None:
             self.scheduler.step()
-        
         self.soft_update()
         self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
         
