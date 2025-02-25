@@ -4,8 +4,8 @@ LOCAL_ARGS=(
   "--threshold_ranks" 4 12 
   "--threshold_rewards" 30 20 
   "--max_draw_probability" 0.4
-  "--env_name" "lin_8"  
-  "--max_strength" 8
+  "--env_name" "lin_16"  
+  "--max_strength" 16
   "--strength_decay_factor" 1
   "--strength_decay_method" "linear"
   "--agent_id" 13
@@ -29,7 +29,7 @@ python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --buffer_size 10000 \
     --batch_size 64 \
     --train_epochs 1 \
-    --lr 0.0003 \
+    --lr 0.0005 \
 
 python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --hidden_sizes 256 64 \
@@ -39,7 +39,7 @@ python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --buffer_size 10000 \
     --batch_size 64 \
     --train_epochs 1 \
-    --lr 0.0003 \
+    --lr 0.0005 \
 
 python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --hidden_sizes 256 64 \
@@ -49,7 +49,7 @@ python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --buffer_size 10000 \
     --batch_size 64 \
     --train_epochs 4 \
-    --lr 0.0003 \
+    --lr 0.0005 \
 
 python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --hidden_sizes 256 64 \
@@ -59,7 +59,7 @@ python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --buffer_size 10000 \
     --batch_size 64 \
     --train_epochs 4 \
-    --lr 0.0003 \
+    --lr 0.0005 \
 
 python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --hidden_sizes 256 64 \
@@ -68,7 +68,7 @@ python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --buffer_size 10000 \
     --batch_size 64 \
     --train_epochs 1 \
-    --lr 0.0003 \
+    --lr 0.0005 \
 
 python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --hidden_sizes 256 64 \
@@ -77,7 +77,7 @@ python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --buffer_size 10000 \
     --batch_size 64 \
     --train_epochs 1 \
-    --lr 0.0003 \
+    --lr 0.0005 \
 
 python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --hidden_sizes 256 64 \
@@ -86,7 +86,7 @@ python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --buffer_size 10000 \
     --batch_size 64 \
     --train_epochs 4 \
-    --lr 0.0003 \
+    --lr 0.0005 \
 
 python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --hidden_sizes 256 64 \
@@ -95,4 +95,4 @@ python -u swiss_round_run.py "${LOCAL_ARGS[@]}" \
     --buffer_size 10000 \
     --batch_size 64 \
     --train_epochs 4 \
-    --lr 0.0003 \
+    --lr 0.0005 \

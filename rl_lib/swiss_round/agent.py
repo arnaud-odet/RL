@@ -335,10 +335,10 @@ class DQNAgent:
                 # Print progress
                 if successful_episodes % verbose_step == 0 or successful_episodes == self.n_train_episodes:
                     print(f'Episode {successful_episodes:8}/{self.n_train_episodes} | '
-                        f'Avg Reward: {np.mean(self.episode_rewards[-verbose_step:]):.2f} ± {np.std(self.episode_rewards[-verbose_step:]):.2f} |  '
+                        f'Avg Reward: {np.mean(self.episode_rewards[-verbose_step:]):5.2f} ± {np.std(self.episode_rewards[-verbose_step:]):5.2f} |  '
                         f'Avg nb gambits played {np.mean(self.gambits_count[-verbose_step:]):.2f} ± {np.std(self.gambits_count[-verbose_step:]):.2f} | '
                         f'Epsilon: {self.epsilon:.3f} | '
-                        f'Failed episodes: {failed_episodes}')
+                        f'Failed episodes: {failed_episodes:4}')
                 
             except ValueError:
                 continue
@@ -401,7 +401,7 @@ class DQNAgent:
                 # Print progress
                 if successful_episodes % verbose_step == 0 or successful_episodes == self.n_test_episodes:
                     print(f'Episode {successful_episodes:8}/{self.n_test_episodes} | '
-                        f'Avg Reward: {np.mean(test_rewards[-verbose_step:]):.2f} ± {np.std(test_rewards[-verbose_step:]):.2f} | '
+                        f'Avg Reward: {np.mean(test_rewards[-verbose_step:]):4.2f} ± {np.std(test_rewards[-verbose_step:]):4.2f} | '
                         f'Avg nb gambits played {np.mean(test_gambits_count[-verbose_step:]):.2f} ± {np.std(test_gambits_count[-verbose_step:]):.2f} | '
                         f'Failed episodes: {failed_episodes}')
                 
